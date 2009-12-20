@@ -1,0 +1,136 @@
+#!/bin/bash 
+
+script=${0##*/}
+case $script in
+    cron-add) action=add ;;
+    cron-del) action=del ;;
+    cron-job) action=check ;;
+esac
+
+synopsis="$script [--minute|--hour|--day|--month|--weekday PATTERN]... METHOD ARGS"
+
+self=.
+
+declare -a field
+while test -n "$1"; do
+    case $1 in
+        --minute)   shift; field[0]="$1" ;;
+        --hour)     shift; field[1]="$1" ;;
+        --day)      shift; field[2]="$1" ;;
+        --month)    shift; field[3]="$1" ;;
+        --weekday)  shift; field[4]="$1" ;;
+        -h)         exec printf "synopsis: %s\n" $synopsis ;;
+        --help)     exec awk '/^NAME/{ok=1}ok{print}' $0 ;;
+        -?*)        printf "synopsis: %s\n" $synopsis >&2; exit 1 ;;
+        *)          break ;;
+    esac
+    shift
+done
+
+for i in {0..4}; do 
+    test -n "${field[i]}" || field[i]=\*
+done
+
+tob=/usr/local/bin/tob
+ob=$PWD
+
+parse-crontab-entry () {
+    entry=${1## }                               # strip any leading spaces
+    pat=${entry%% *}; entry=${entry#$pat }      # parse first timespec pattern
+    test "$pat" == '*' ||
+        opt="--minute $pat "  # show only if not '*'
+    pat=${entry%% *}; entry=${entry#$pat }
+    test "$pat" == '*' ||
+        opt="$opt--hour $pat "
+    pat=${entry%% *}; entry=${entry#$pat }
+    test "$pat" == '*' ||
+        opt="$opt--day $pat "
+    pat=${entry%% *}; entry=${entry#$pat }
+    test "$pat" == '*' ||
+        opt="$opt--month $pat "
+    pat=${entry%% *}; entry=${entry#$pat }
+    test "$pat" == '*' ||
+        opt="$opt--weekday $pat "
+    entry=${entry#$tob }                        # remove tob path
+    entry=${entry#$ob.}                         # remove object path
+  # printf -- "$opt$entry\n"
+    printf "%s.%s $opt$entry\n" $TOB_object $TOB_method
+    }
+
+method="$1" && shift
+test -n "$method" || {
+    test $action == check && { ## show entries for this object
+        while read -r entry; do
+            test "${entry:0:1}" == '#' && continue
+            parse-crontab-entry "$entry"
+        done < <(crontab -l | grep "$tob $ob\.")
+        exit
+        }
+        
+    echo no method given >&2
+    exit 2
+    }
+
+tob $self.method $method >/dev/null || {
+    echo warning: method $method not found >&2
+    exit 3
+    }
+
+field[5]="$tob $ob.$method"
+
+
+entry="${field[@]} $@"
+
+entry_escaped="${entry//\*/\\*}"
+entry_escaped="${entry_escaped//\?/\\?}"
+entry_escaped="${entry_escaped//./\\.}"
+
+crontab -l | grep "$entry_escaped" > /dev/null
+exists=$?
+
+test $action == check &&
+    exit $exists
+
+case $action in
+    check)
+        exit $exists;
+        ;;
+    add)
+        test $exists == 0 && {
+            echo entry is already in crontab >&2
+            exit 1
+            }
+        (crontab -l; echo "$entry") | crontab -
+        exit 
+        ;;
+    del)
+        test $exists == 0 || {
+            echo entry is not in crontab >&2
+            exit 1
+            }
+        crontab -l | grep -v "$entry_escaped" | crontab -
+        exit 
+        ;;
+esac
+
+crontab=$(crontab -l)
+# echo "$crontab"
+
+exit 0
+
+NAME
+    cron-job -- show/check job entries in crontab for this object
+    cron-add -- add a crontab entry
+    cron-del -- delete a crontab entry
+
+SYNOPSIS
+    cron-job [time_specs] [method args]
+    cron-add [time_specs] method [args]
+    cron-del [time_specs] method [args]
+    where:
+        time_specs: --minute|--hour|--day|--month|--weekday pattern
+        pattern: any crontab(5) value for time parameters
+
+DESCRIPTION
+    Wrapper for crontab to schedule execution of a method on the
+    target object.
