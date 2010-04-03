@@ -1,0 +1,28 @@
+NAME
+    Cron -- thinobject class for interfacing to crontabs
+
+DESCRIPTION
+    Only one method, cron-job, is defined, but it assumes the action add
+    or delete if called as cron-add or cron-del.  If called as cron-job
+    it displays the crontab entriees for the object.
+
+    The five time entries of crontab(1) are represented by name -- minute,
+    hour, day, month, and weekday -- each defaulting to *, meaning always
+    match.
+    
+    The crontab command field can be any object method.
+
+
+METHODS
+    cron-job
+    cron-add
+    cron-del
+
+PROPERTIES
+
+SEE ALSO
+
+BUGS
+
+AUTHOR
+    ken.irving@alaska.edu (c) 2009
